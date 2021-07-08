@@ -5,6 +5,7 @@
 #endif
 #include <Wire.h>
 #include "DFRobot_RGBLCD.h"
+#include <Servo.h>
 
 #define OUTSIDE_LED_PIN 2
 #define INSIDE_LED_PIN 3
@@ -49,11 +50,15 @@ int t=0;
 SimpleTimer timer;
 Adafruit_NeoPixel outsideLED = Adafruit_NeoPixel(1, OUTSIDE_LED_PIN, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel insideLED = Adafruit_NeoPixel(1, INSIDE_LED_PIN, NEO_GRB + NEO_KHZ800);
+Servo motor;
 //Adafruit_NeoPixel RGB_Strip = Adafruit_NeoPixel(numberOfLEDs, LEDPin, NEO_GRB + NEO_KHZ800);
 DFRobot_RGBLCD lcd(16,2);
 
 void setup() {
   lcd.init();
+
+  motor.attach(MOTOR_PIN);
+  motor.writeMicroseconds(800); 
   
   timer.setInterval(1000, every100msTimer);
   pinMode(ULTRASONIC_SENSOR_OUTSIDE_TRIG, OUTPUT);
@@ -61,7 +66,6 @@ void setup() {
   pinMode(ULTRASONIC_SENSOR_INSIDE_TRIG, OUTPUT); 
   pinMode(ULTRASONIC_SENSOR_INSIDE_ECHO, INPUT); 
   pinMode(EMERGENCY_BUTTON, INPUT);
-  pinMode(MOTOR_PIN, OUTPUT);
   
   outsideLED.begin();
 //  outsideLED.show();
@@ -69,23 +73,30 @@ void setup() {
 //  insideLED.show();
 
   Serial.begin(115200);
+
+  outsideLED.clear();
+  outsideLED.setPixelColor(0, outsideLED.Color(0, 125, 0));
+  outsideLED.show();
+  
+  insideLED.clear();   
+  insideLED.setPixelColor(0, insideLED.Color(125, 0, 0));
+  insideLED.show();
 }
 
 void loop() {
   updateSensors();
   modeSelector();
-  testLED(outsideLED);
   showOnLCD();
   outputEverything();
-  digitalWrite(MOTOR_PIN, HIGH);
+  openDoor();
+  delay(2000);
+  closeDoor();
+  delay(2000);
 //  colorWipe(outsideLED.Color(0, 128, 0), outsideLED);
-
 }
 
 void every100msTimer(void) {         // Check is ready a first timer
     timeCounter++;
-  
-  
 }
 
 
@@ -167,45 +178,19 @@ void ultrasonicValueUpdate() {
 }
 
 void detectPerson() {
-  if(ultrasonicOutside < ultrasonicOutsideNormalDistance - ultrasonicSystematicError){
-    if(isInsideUltrasonicTriggered == true){
-      if(peopleCounter <= 0){
-        peopleCounter = 0;
-      } else {
-        peopleCounter--;
-        isInsideUltrasonicTriggered = false;
-        isOutsideUltrasonicTriggered = false;
-      }
-    } else {
-      isOutsideUltrasonicTriggered = true;
-    }
-  }
-
-  if(ultrasonicInside < ultrasonicInsideNormalDistance - ultrasonicSystematicError){
-    if(isOutsideUltrasonicTriggered == true){
-      peopleCounter++;
-      isInsideUltrasonicTriggered = false;
-      isOutsideUltrasonicTriggered = false;
-    } else {
-      isInsideUltrasonicTriggered = true;
-    }
-  }
+  
 }
 
 void openDoor() {
   if(doorIsOpen == false){
-    digitalWrite(MOTOR_PIN, HIGH);
-//    delay(250);
-    digitalWrite(MOTOR_PIN, LOW);
+    motor.write(110);
     doorIsOpen = true;
   }
 }
 
 void closeDoor() {
   if(doorIsOpen == true){
-//    digitalWrite(MOTOR_PIN, HIGH);
-//    delay(250);
-    digitalWrite(MOTOR_PIN, LOW);
+    motor.write(700);
     doorIsOpen = false;
   }
 }
@@ -246,11 +231,10 @@ void testLED(Adafruit_NeoPixel anyLED){
   anyLED.setBrightness(128);
   for(int i = 0; i < 255; i++){
     for(int j = 0; i < 255; i++){
-      for(int k = 0; i < 255; i++){
          anyLED.clear();
-         anyLED.setPixelColor(0, anyLED.Color(k, j, k));
+         anyLED.setPixelColor(0, anyLED.Color(0, j, i));
          anyLED.show();
-      }
+      
     }
   }
 }
