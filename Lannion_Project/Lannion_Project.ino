@@ -1,4 +1,4 @@
-#include <SimpleTimer.h>
+#include <GyverTimers.h>
 #include <Adafruit_NeoPixel.h>
 #ifdef __AVR__
 #include <avr/power.h>
@@ -11,8 +11,8 @@
 #define INSIDE_LED_PIN 3
 #define BLUETOOTH_RX_PIN 4
 #define BLUETOOTH_TX_PIN 5
-#define EMERGENCY_BUTTON 6
-#define MOTOR_PIN 8
+#define EMERGENCY_BUTTON 8
+#define MOTOR_PIN 6
 
 #define ULTRASONIC_SENSOR_OUTSIDE_TRIG 9
 #define ULTRASONIC_SENSOR_OUTSIDE_ECHO 10
@@ -27,42 +27,47 @@
 #define BAD_COUNT_MODE 3
 #define EMERGENCY_MODE 4
 
-#define MAXIMUM_AIR_QUALITY 400
+#define NORMAL_AIR_QUALITY 300
+#define MAXIMUM_AIR_QUALITY 600
 #define MAXIMUM_PEOPLE 10
 #define MAXIMUM_LED_BRIGHT 128
 
-//Anything else ?
-
 int mode = 0;
 int airQuality = 0;
+
+int delayForDetecting = 201;
+bool doDetecting = true;
 float ultrasonicOutside = 0, ultrasonicInside = 0;
-int ultrasonicSystematicError = 5;
-int ultrasonicOutsideNormalDistance = 50, ultrasonicInsideNormalDistance = 60;
+int ultrasonicSystematicError = 20;
+int ultrasonicOutsideNormalDistance = 180, ultrasonicInsideNormalDistance = 180;
+int peopleCounter = 0;
+
 bool buttonIsPressed = false, doorIsOpen = false;
 float distance, sensity;
 int timeCounter = 0;
-int peopleCounter = 0;
-bool isOutsideUltrasonicTriggered = false, isInsideUltrasonicTriggered = false;
-//LCD//
-int g,b;
-int t=10;
-int r=255;
 
-//------------------------
-SimpleTimer timer;
+bool somethingWasDetected = false;
+
+//LCD//
+int r,g,b;
+int t=0;
+///////
+
 Adafruit_NeoPixel outsideLED = Adafruit_NeoPixel(1, OUTSIDE_LED_PIN, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel insideLED = Adafruit_NeoPixel(1, INSIDE_LED_PIN, NEO_GRB + NEO_KHZ800);
 Servo motor;
-//Adafruit_NeoPixel RGB_Strip = Adafruit_NeoPixel(numberOfLEDs, LEDPin, NEO_GRB + NEO_KHZ800);
 DFRobot_RGBLCD lcd(16,2);
 
 void setup() {
+  
+  Timer2.setPeriod(100000);
+  Timer2.enableISR(CHANNEL_A);
+  
   lcd.init();
 
   motor.attach(MOTOR_PIN);
   motor.writeMicroseconds(800); 
   
-  timer.setInterval(1000, every100msTimer);
   pinMode(ULTRASONIC_SENSOR_OUTSIDE_TRIG, OUTPUT);
   pinMode(ULTRASONIC_SENSOR_OUTSIDE_ECHO, INPUT); 
   pinMode(ULTRASONIC_SENSOR_INSIDE_TRIG, OUTPUT); 
@@ -70,19 +75,9 @@ void setup() {
   pinMode(EMERGENCY_BUTTON, INPUT);
   
   outsideLED.begin();
-//  outsideLED.show();
   insideLED.begin();
-//  insideLED.show();
 
   Serial.begin(115200);
-
-  outsideLED.clear();
-  outsideLED.setPixelColor(0, outsideLED.Color(60, 60, 60));
-  outsideLED.show();
-  
-  insideLED.clear();   
-  insideLED.setPixelColor(0, insideLED.Color(125, 0, 0));
-  insideLED.show();
 }
 
 void loop() {
@@ -90,18 +85,13 @@ void loop() {
   modeSelector();
   showOnLCD();
   outputEverything();
-  controlInsideLED();
-  controlOutsideLED();
 
-
+//  openDoor();
+//  delay(2000);
+//  closeDoor();
+//  delay(2000);
 }
 
-void every100msTimer(void) {         // Check is ready a first timer
-    timeCounter++;
-}
-
-//----------------------------------
-bool alertAirQuality = false;
 void controlInsideLED() {
   if(airQuality != 0 && airQuality < MAXIMUM_AIR_QUALITY) {
     float indexAir = (float) MAXIMUM_AIR_QUALITY/airQuality;
@@ -111,32 +101,30 @@ void controlInsideLED() {
     insideLED.show();
   }
 }
-void controlOutsideLED()
-{
-  if(peopleCounter == 0)
-  {
+
+void controlOutsideLED() {
+  if(peopleCounter == 0) {
     outsideLED.clear();  
     outsideLED.setPixelColor(0, outsideLED.Color(0, MAXIMUM_LED_BRIGHT, 0));
     outsideLED.show();
   } else if(peopleCounter != 0 && peopleCounter <= MAXIMUM_PEOPLE) {
     Serial.println("WE ARE HERE");
-   float  indexPeople = (float) MAXIMUM_PEOPLE/peopleCounter;
-   int redColorBright_Out = MAXIMUM_LED_BRIGHT/indexPeople;
-   int greenColorBright_Out = MAXIMUM_LED_BRIGHT - redColorBright_Out;
-   Serial.println(redColorBright_Out);
-   Serial.println(greenColorBright_Out);
-   outsideLED.clear();  
-   outsideLED.setPixelColor(0, outsideLED.Color(((int) redColorBright_Out), ((int) greenColorBright_Out), 0));
-   outsideLED.show();
+    float  indexPeople = (float) MAXIMUM_PEOPLE/peopleCounter;
+    int redColorBright_Out = MAXIMUM_LED_BRIGHT/indexPeople;
+    int greenColorBright_Out = MAXIMUM_LED_BRIGHT - redColorBright_Out;
+    Serial.println(redColorBright_Out);
+    Serial.println(greenColorBright_Out);
+    outsideLED.clear();  
+    outsideLED.setPixelColor(0, outsideLED.Color(((int) redColorBright_Out), ((int) greenColorBright_Out), 0));
+    outsideLED.show();
   } 
 }
 
 
-
 void modeSelector() {
-  if(airQuality < MAXIMUM_AIR_QUALITY && peopleCounter <= MAXIMUM_PEOPLE && !buttonIsPressed){
+  if(airQuality < NORMAL_AIR_QUALITY && peopleCounter <= MAXIMUM_PEOPLE && !buttonIsPressed){
     mode = GOOD_MODE;
-  } else if (airQuality > MAXIMUM_AIR_QUALITY && peopleCounter <= MAXIMUM_PEOPLE && !buttonIsPressed){
+  } else if (airQuality > NORMAL_AIR_QUALITY && peopleCounter <= MAXIMUM_PEOPLE && !buttonIsPressed){
     mode = BAD_AIR_MODE;
   } else if (peopleCounter > MAXIMUM_PEOPLE && !buttonIsPressed){
     mode = BAD_COUNT_MODE;
@@ -145,11 +133,11 @@ void modeSelector() {
   }
 }
 
+
 void modeExecutor() {
   switch (mode) {
     case START_MODE:
-
-//      colorWipe(insideLED.Color(126, 126, 126), &insideLED);
+    
       openDoor();
       break;
     case GOOD_MODE:
@@ -175,9 +163,7 @@ void modeExecutor() {
 
 void updateSensors() {
   ultrasonicValueUpdate();
-
   detectPerson();
-  
   airQuality = analogRead(AQ_SENSOR);
 
   if (digitalRead(EMERGENCY_BUTTON) == HIGH) {
@@ -188,7 +174,6 @@ void updateSensors() {
 }
 
 void ultrasonicValueUpdate() {
-  
   digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, LOW);
   delayMicroseconds(2);
   digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, HIGH);
@@ -211,35 +196,33 @@ void ultrasonicValueUpdate() {
 }
 
 void detectPerson() {
-   Serial.println("___________________________");
-  if(ultrasonicOutsideNormalDistance - ultrasonicSystematicError > ultrasonicOutside){
-    if( isInsideUltrasonicTriggered==true){ 
-      Serial.println("1: Runs-outside to inside");
-      peopleCounter--;
-      isOutsideUltrasonicTriggered=false;
-      isInsideUltrasonicTriggered=false; //s2
-      return;
-    } else {  
-      Serial.println("2: Runs-outside exec first");
-      isOutsideUltrasonicTriggered=true;
-    }
-    
-  }
-  
-  if(ultrasonicInsideNormalDistance - ultrasonicSystematicError>ultrasonicInside){  //from inside to outside 
-    if(isOutsideUltrasonicTriggered==true){
-      Serial.println("3: Runs-inside to outside");
+  if(delayForDetecting > 200){
+    if(ultrasonicOutside < ultrasonicOutsideNormalDistance - ultrasonicSystematicError && somethingWasDetected == false){
+      Serial.println("OUTSIDE++");
       peopleCounter++;
-      isOutsideUltrasonicTriggered=false;
-      isInsideUltrasonicTriggered=false;
-      return;
-    } else {
-      Serial.println("4: Runs-inside exec first");
-
-      isInsideUltrasonicTriggered = true;
-    }   
-
+      somethingWasDetected = true;
+    }
+    if(ultrasonicInside < ultrasonicInsideNormalDistance - ultrasonicSystematicError && somethingWasDetected == false){
+      Serial.println("INSIDE--");
+      peopleCounter--;
+      somethingWasDetected = true;
+    }
+    if(ultrasonicInside + ultrasonicSystematicError > ultrasonicInsideNormalDistance &&
+    ultrasonicOutside + ultrasonicSystematicError > ultrasonicOutsideNormalDistance &&
+    ultrasonicInside < ultrasonicInsideNormalDistance + ultrasonicSystematicError &&
+    ultrasonicOutside < ultrasonicOutsideNormalDistance + ultrasonicSystematicError &&
+    somethingWasDetected == true
+    ){
+      Serial.print("BECOMES FALSE! INSIDE: ");
+      Serial.print(ultrasonicInside);
+      Serial.print("\t OUTSIDE: ");
+      Serial.println(ultrasonicOutside);
+      doDetecting = false;
+      delayForDetecting = 0;
+      somethingWasDetected = false;
+    }
   }
+//  Serial.println("==========");
 }
 
 void openDoor() {
@@ -263,7 +246,7 @@ void showOnLCD(){
   t=0;
   lcd.setRGB(r, g, b);    
   lcd.setCursor(0,0);
-  lcd.print("peopleCounter: ");
+  lcd.print("Counter: ");
   lcd.print(peopleCounter);
   lcd.setCursor(0,1);
   lcd.print("AirQuality: ");
@@ -287,15 +270,10 @@ void outputEverything() {
   Serial.println(timeCounter);
 }
 
-void testLED(Adafruit_NeoPixel anyLED){
-  anyLED.clear();
-  anyLED.setBrightness(128);
-  for(int i = 0; i < 255; i++){
-    for(int j = 0; i < 255; i++){
-         anyLED.clear();
-         anyLED.setPixelColor(0, anyLED.Color(0, j, i));
-         anyLED.show();
-      
-    }
+ISR(TIMER2_A) {
+  detectPerson();
+  if(!doDetecting){
+    delayForDetecting++;
   }
+  timeCounter++;
 }
