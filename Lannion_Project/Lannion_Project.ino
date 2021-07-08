@@ -31,6 +31,7 @@
 #define MAXIMUM_AIR_QUALITY 600
 #define MAXIMUM_PEOPLE 10
 #define MAXIMUM_LED_BRIGHT 128
+#define SENSOR_MISTAKE_PERCENT 0.05
 
 int mode = 0;
 int airQuality = 0;
@@ -38,8 +39,8 @@ int airQuality = 0;
 int delayForDetecting = 201;
 bool doDetecting = true;
 float ultrasonicOutside = 0, ultrasonicInside = 0;
-int ultrasonicSystematicError = 20;
-int ultrasonicOutsideNormalDistance = 180, ultrasonicInsideNormalDistance = 180;
+int ultrasonicSystematicErrorOutside, ultrasonicSystematicErrorInside;
+int ultrasonicOutsideNormalDistance  = 0, ultrasonicInsideNormalDistance = 0;
 int peopleCounter = 0;
 
 bool buttonIsPressed = false, doorIsOpen = false;
@@ -60,9 +61,6 @@ DFRobot_RGBLCD lcd(16,2);
 
 void setup() {
   
-  Timer2.setPeriod(100000);
-  Timer2.enableISR(CHANNEL_A);
-  
   lcd.init();
 
   motor.attach(MOTOR_PIN);
@@ -73,19 +71,50 @@ void setup() {
   pinMode(ULTRASONIC_SENSOR_INSIDE_TRIG, OUTPUT); 
   pinMode(ULTRASONIC_SENSOR_INSIDE_ECHO, INPUT); 
   pinMode(EMERGENCY_BUTTON, INPUT);
+  ultrasonicValueUpdate();
+while(ultrasonicOutsideNormalDistance == 0 && ultrasonicInsideNormalDistance == 0 ) {
+  ultrasonicValueUpdate();
   
+
+  
+  ultrasonicOutsideNormalDistance = ultrasonicOutside;
+  ultrasonicInsideNormalDistance  = ultrasonicInside;
+
+}
+
+  ultrasonicSystematicErrorOutside = ultrasonicOutsideNormalDistance * SENSOR_MISTAKE_PERCENT;
+  ultrasonicSystematicErrorInside = ultrasonicInsideNormalDistance * SENSOR_MISTAKE_PERCENT;
+
+ 
   outsideLED.begin();
   insideLED.begin();
 
   Serial.begin(115200);
+  
+
+  Timer2.setPeriod(10000);
+  Timer2.enableISR(CHANNEL_A);
+
+  Serial.print(" normal distance outside: ");
+  Serial.println(ultrasonicOutsideNormalDistance);
+  Serial.print(" normal distance inside: ");
+  Serial.println(ultrasonicInsideNormalDistance);
+
+  Serial.print("error outside cm: ");
+ Serial.println(ultrasonicSystematicErrorOutside);
+ Serial.print(" error inside cm: ");
+ Serial.println(ultrasonicSystematicErrorInside);
+
 }
 
 void loop() {
+  
   updateSensors();
   modeSelector();
   showOnLCD();
   outputEverything();
-
+controlInsideLED();
+controlOutsideLED();
 //  openDoor();
 //  delay(2000);
 //  closeDoor();
@@ -156,7 +185,7 @@ void modeExecutor() {
     
       openDoor();
       break;
-  }
+  } 
 }
 
 
@@ -174,15 +203,27 @@ void updateSensors() {
 }
 
 void ultrasonicValueUpdate() {
+  //TASK: 1) We should detect the REAL distance at first
+  //      2) We should read the value
+  //      3) We should store the value
+  //      4) We should use the value
+
+ 
+  
+  
   digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, LOW);
   delayMicroseconds(2);
   digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, HIGH);
-  delayMicroseconds(10);
+  delayMicroseconds(10); 
   digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, LOW);
 
   long duration = pulseIn(ULTRASONIC_SENSOR_OUTSIDE_ECHO, HIGH);
   ultrasonicOutside = duration * 0.034 / 2;
 
+ //----------
+ 
+
+ 
 
   digitalWrite(ULTRASONIC_SENSOR_INSIDE_TRIG, LOW);
   delayMicroseconds(2);
@@ -197,20 +238,20 @@ void ultrasonicValueUpdate() {
 
 void detectPerson() {
   if(delayForDetecting > 200){
-    if(ultrasonicOutside < ultrasonicOutsideNormalDistance - ultrasonicSystematicError && somethingWasDetected == false){
+    if(ultrasonicOutside < ultrasonicOutsideNormalDistance - ultrasonicSystematicErrorOutside && somethingWasDetected == false){
       Serial.println("OUTSIDE++");
       peopleCounter++;
       somethingWasDetected = true;
     }
-    if(ultrasonicInside < ultrasonicInsideNormalDistance - ultrasonicSystematicError && somethingWasDetected == false){
+    if(ultrasonicInside < ultrasonicInsideNormalDistance - ultrasonicSystematicErrorInside && somethingWasDetected == false){
       Serial.println("INSIDE--");
       peopleCounter--;
       somethingWasDetected = true;
     }
-    if(ultrasonicInside + ultrasonicSystematicError > ultrasonicInsideNormalDistance &&
-    ultrasonicOutside + ultrasonicSystematicError > ultrasonicOutsideNormalDistance &&
-    ultrasonicInside < ultrasonicInsideNormalDistance + ultrasonicSystematicError &&
-    ultrasonicOutside < ultrasonicOutsideNormalDistance + ultrasonicSystematicError &&
+    if(ultrasonicInside + ultrasonicSystematicErrorInside > ultrasonicInsideNormalDistance &&
+    ultrasonicOutside + ultrasonicSystematicErrorOutside > ultrasonicOutsideNormalDistance &&
+    ultrasonicInside < ultrasonicInsideNormalDistance + ultrasonicSystematicErrorInside &&
+    ultrasonicOutside < ultrasonicOutsideNormalDistance + ultrasonicSystematicErrorOutside &&
     somethingWasDetected == true
     ){
       Serial.print("BECOMES FALSE! INSIDE: ");
