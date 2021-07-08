@@ -45,8 +45,6 @@
 
 int mode = 0, LEDMode = 0;
 int airQuality = 0;
-char title =0;
-
 
 int delayForDetecting = 25;
 bool doDetecting = true;
@@ -62,7 +60,7 @@ int timeCounter = 0, timeForEmergencyExit = 0, blinkingLEDTimer = 0;
 bool somethingWasDetected = false, blinkingNow = false;
 
 int peopleCounterLEDRed = 0, peopleCounterLEDGreen = 0, peopleCounterLEDBlue = 0;
-int AirQualityLEDRed = 0, AirQualityLEDGreen = 0, AirQualityLEDBlue = 0;
+int airQualityLEDRed = 0, airQualityLEDGreen = 0, airQualityLEDBlue = 0;
 int modeIndicatorRed = 0, modeIndicatorGreen = 0, modeIndicatorBlue = 0;
 int LCDRed = 0,LCDGreen = 0, LCDBlue = 0;
 int LCDTime = 0;
@@ -84,6 +82,7 @@ void setup() {
   pinMode(ULTRASONIC_SENSOR_INSIDE_TRIG, OUTPUT); 
   pinMode(ULTRASONIC_SENSOR_INSIDE_ECHO, INPUT); 
   pinMode(EMERGENCY_BUTTON, INPUT_PULLUP);
+
   attachInterrupt(digitalPinToInterrupt(EMERGENCY_BUTTON), buttonInterrupt, FALLING);
   
   ultrasonicValueUpdate();
@@ -120,7 +119,6 @@ void setup() {
 }
 
 void loop() {
-  ultrasonicValueUpdate();
   detectPerson();
   updatePeripherals();
   modeSelector();
@@ -130,7 +128,7 @@ void loop() {
 
 void controlInsideLED() {
   insideLED.clear();   
-  insideLED.setPixelColor(0, insideLED.Color(AirQualityLEDRed, AirQualityLEDGreen, AirQualityLEDBlue));
+  insideLED.setPixelColor(0, insideLED.Color(airQualityLEDRed, airQualityLEDGreen, airQualityLEDBlue));
   insideLED.show();
 }
 
@@ -186,6 +184,7 @@ void modeExecutor() {
 }
 
 void updatePeripherals() {
+  ultrasonicValueUpdate();
   showOnLCD();
   colorRegulator();
   controlInsideLED();
@@ -202,23 +201,26 @@ void updatePeripherals() {
 }
 
 void ultrasonicValueUpdate() {
-  digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, LOW);
-  delayMicroseconds(2);
-  digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, HIGH);
-  delayMicroseconds(10); 
-  digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, LOW);
+//  digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, LOW);
+//  delayMicroseconds(2);
+//  digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, HIGH);
+//  delayMicroseconds(10); 
+//  digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, LOW);
+//
+//  long duration = pulseIn(ULTRASONIC_SENSOR_OUTSIDE_ECHO, HIGH);
+//  ultrasonicOutside = duration * 0.034 / 2;
+//
+//  digitalWrite(ULTRASONIC_SENSOR_INSIDE_TRIG, LOW);
+//  delayMicroseconds(2);
+//  digitalWrite(ULTRASONIC_SENSOR_INSIDE_TRIG, HIGH);
+//  delayMicroseconds(10);
+//  digitalWrite(ULTRASONIC_SENSOR_INSIDE_TRIG, LOW);
+//
+//  duration = pulseIn(ULTRASONIC_SENSOR_INSIDE_ECHO, HIGH);
+//  ultrasonicInside = duration * 0.034 / 2;
 
-  long duration = pulseIn(ULTRASONIC_SENSOR_OUTSIDE_ECHO, HIGH);
-  ultrasonicOutside = duration * 0.034 / 2;
-
-  digitalWrite(ULTRASONIC_SENSOR_INSIDE_TRIG, LOW);
-  delayMicroseconds(2);
-  digitalWrite(ULTRASONIC_SENSOR_INSIDE_TRIG, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(ULTRASONIC_SENSOR_INSIDE_TRIG, LOW);
-
-  duration = pulseIn(ULTRASONIC_SENSOR_INSIDE_ECHO, HIGH);
-  ultrasonicInside = duration * 0.034 / 2;
+  ultrasonicOutside = (float) analogRead(A0) * 520 / 1023;
+  ultrasonicInside = (float) analogRead(A1) * 520 / 1023;
 }
 
 void detectPerson() {
@@ -271,17 +273,16 @@ void showOnLCD(){
   lcd.setRGB(LCDRed, LCDGreen, LCDBlue);    
   lcd.setCursor(0,0);
   
-  lcd.print("Counter: " + String(peopleCounter));
+  lcd.print("People: " + String(peopleCounter));
   lcd.setCursor(0,1);
   lcd.print("Air: " + String(airQuality));
 }
 
-
 void colorRegulator(){
     switch(LEDMode){
       case NORMAL_LED_MODE:
-        AirQualityLEDRed = MAXIMUM_LED_BRIGHT / ((float) MAXIMUM_AIR_QUALITY / airQuality);
-        AirQualityLEDGreen = MAXIMUM_LED_BRIGHT - AirQualityLEDRed;
+        airQualityLEDRed = MAXIMUM_LED_BRIGHT / ((float) MAXIMUM_AIR_QUALITY / airQuality);
+        airQualityLEDGreen = MAXIMUM_LED_BRIGHT - airQualityLEDRed;
         if(peopleCounter == 0){
           peopleCounterLEDRed = 0;
           peopleCounterLEDGreen = MAXIMUM_LED_BRIGHT;
@@ -298,8 +299,8 @@ void colorRegulator(){
         break;
       case ALARM_LED_MODE:
         if(blinkingNow){
-          AirQualityLEDRed = MAXIMUM_LED_BRIGHT;
-          AirQualityLEDGreen = 0;
+          airQualityLEDRed = MAXIMUM_LED_BRIGHT;
+          airQualityLEDGreen = 0;
           peopleCounterLEDRed = MAXIMUM_LED_BRIGHT;
           peopleCounterLEDGreen = 0;
           LCDRed = 255;      
@@ -315,8 +316,8 @@ void colorRegulator(){
         } else if(!blinkingNow) {
           modeIndicatorRed = 0;
           modeIndicatorGreen = 0;
-          AirQualityLEDRed = 0;
-          AirQualityLEDGreen = 0;
+          airQualityLEDRed = 0;
+          airQualityLEDGreen = 0;
           peopleCounterLEDRed = 0;
           peopleCounterLEDGreen = 0;
           LCDRed = 0;      
@@ -346,14 +347,13 @@ void outputEverythingToDashboard() {
   BTSerial.print("P" + String(peopleCounter) + "*");
   BTSerial.print("T" + String(timeCounter) + "*");
   BTSerial.print("CR" + String(modeIndicatorRed) + "G" + String(modeIndicatorGreen) + "B" + String(modeIndicatorBlue) + "*");
-  BTSerial.print("QR" + String(AirQualityLEDRed) + "G" + String(AirQualityLEDGreen*2) + "B" + String(AirQualityLEDBlue) + "*");
+  BTSerial.print("QR" + String(airQualityLEDRed) + "G" + String(airQualityLEDGreen*2) + "B" + String(airQualityLEDBlue) + "*");
   BTSerial.print("KR" + String(peopleCounterLEDRed) + "G" + String(peopleCounterLEDGreen) + "B" + String(peopleCounterLEDBlue) + "*");
   BTSerial.print("D" + String(ultrasonicOutsideNormalDistance) + "*");
   BTSerial.print("E" + String(ultrasonicInsideNormalDistance) + "*");
   BTSerial.print("Y" + String(ultrasonicSystematicErrorOutside) + "*");
   BTSerial.print("Z" + String(ultrasonicSystematicErrorInside) + "*");
-  BTSerial.print("R" + String(title) + "*");
-  
+    
   if( LEDMode == ALARM_LED_MODE){
     BTSerial.print("R QUARANTINE ROOM*");
   } else{
