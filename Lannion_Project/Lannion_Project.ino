@@ -61,13 +61,14 @@ void setup() {
   pinMode(ULTRASONIC_SENSOR_INSIDE_TRIG, OUTPUT); 
   pinMode(ULTRASONIC_SENSOR_INSIDE_ECHO, INPUT); 
   pinMode(EMERGENCY_BUTTON, INPUT);
+  pinMode(MOTOR_PIN, OUTPUT);
   
   outsideLED.begin();
 //  outsideLED.show();
   insideLED.begin();
 //  insideLED.show();
 
-  Serial.begin(9600);
+  Serial.begin(115200);
 }
 
 void loop() {
@@ -76,9 +77,9 @@ void loop() {
   testLED(outsideLED);
   showOnLCD();
   outputEverything();
+  digitalWrite(MOTOR_PIN, HIGH);
 //  colorWipe(outsideLED.Color(0, 128, 0), outsideLED);
 
-  delay(500);
 }
 
 void every100msTimer(void) {         // Check is ready a first timer
@@ -194,7 +195,7 @@ void detectPerson() {
 void openDoor() {
   if(doorIsOpen == false){
     digitalWrite(MOTOR_PIN, HIGH);
-    delay(250);
+//    delay(250);
     digitalWrite(MOTOR_PIN, LOW);
     doorIsOpen = true;
   }
@@ -202,8 +203,8 @@ void openDoor() {
 
 void closeDoor() {
   if(doorIsOpen == true){
-    digitalWrite(MOTOR_PIN, HIGH);
-    delay(250);
+//    digitalWrite(MOTOR_PIN, HIGH);
+//    delay(250);
     digitalWrite(MOTOR_PIN, LOW);
     doorIsOpen = false;
   }
@@ -213,7 +214,7 @@ void showOnLCD(){
   r= (abs(sin(3.14*t/180)))*255;       
   g= (abs(sin(3.14*(t+60)/180)))*255;
   b= (abs(sin(3.14*(t+120)/180)))*255;
-  t=t+3;
+  t=0;
   lcd.setRGB(r, g, b);    
   lcd.setCursor(0,0);
   lcd.print("peopleCounter: ");
