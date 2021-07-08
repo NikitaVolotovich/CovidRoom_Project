@@ -27,8 +27,10 @@
 #define BAD_COUNT_MODE 3
 #define EMERGENCY_MODE 4
 
-#define NORMAL_AIR_QUALITY 400
+#define MAXIMUM_AIR_QUALITY 400
 #define MAXIMUM_PEOPLE 10
+#define MAXIMUM_LED_BRIGHT 128
+
 //Anything else ?
 
 int mode = 0;
@@ -46,12 +48,7 @@ int g,b;
 int t=10;
 int r=255;
 
-//const int red = 11; /*connected to pin 7*/
-//const int green = 10; /*connected to pin 7*/
-//const int blue = 9; /*connected to pin -3*/
-///////
-
-
+//------------------------
 SimpleTimer timer;
 Adafruit_NeoPixel outsideLED = Adafruit_NeoPixel(1, OUTSIDE_LED_PIN, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel insideLED = Adafruit_NeoPixel(1, INSIDE_LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -93,61 +90,53 @@ void loop() {
   modeSelector();
   showOnLCD();
   outputEverything();
+  controlInsideLED();
   controlOutsideLED();
-//  for(int i = 0; i < 120; i++){
-//    insideLED.clear();   
-//    insideLED.setPixelColor(0, insideLED.Color(i, i / 2, i));
-//    insideLED.show();
-//    delay(100);
-//  }
-  
-//  openDoor();
-//  delay(2000);
-//  closeDoor();
-//  delay(2000);
 
-//  colorWipe(outsideLED.Color(0, 128, 0), outsideLED);
+
 }
 
 void every100msTimer(void) {         // Check is ready a first timer
     timeCounter++;
 }
 
-// step 1 -> cond with < 340 ac, here we set flag (alertAirQuality) to false
-// step 2 - constant red if flag is true
-// step 3 - fade where we set the flag to true
+//----------------------------------
 bool alertAirQuality = false;
-void controlOutsideLED(){
-  if(airQuality < 340) {
-    alertAirQuality = false;
+void controlInsideLED() {
+  if(airQuality != 0 && airQuality < MAXIMUM_AIR_QUALITY) {
+    float indexAir = (float) MAXIMUM_AIR_QUALITY/airQuality;
+    float redColorBright_In = MAXIMUM_LED_BRIGHT/indexAir, greenColorBright_In = MAXIMUM_LED_BRIGHT - redColorBright_In;
     insideLED.clear();   
-    insideLED.setPixelColor(0, insideLED.Color(0, 50, 0));
+    insideLED.setPixelColor(0, insideLED.Color(((int) redColorBright_In), ((int) greenColorBright_In), 0));
     insideLED.show();
-  } else if (alertAirQuality == true) {
-      insideLED.setPixelColor(0, insideLED.Color(255, 0, 0));
-      insideLED.show();
-  } else {
-    // process is blocking all other functions by taking the thread exclusively
-      alertAirQuality = true;
-      int g = 255;
-      int r = 0;
-      for(;g>=0,r<255;r++,g--)
-        {
-        insideLED.setPixelColor(0, insideLED.Color(r, g, 0));
-        Serial.println("r: ");
-        Serial.print(r);
-        Serial.println("g: ");
-        Serial.print(g);
-        insideLED.show();
-        delay(25);
-        }
-    }
   }
+}
+void controlOutsideLED()
+{
+  if(peopleCounter == 0)
+  {
+    outsideLED.clear();  
+    outsideLED.setPixelColor(0, outsideLED.Color(0, MAXIMUM_LED_BRIGHT, 0));
+    outsideLED.show();
+  } else if(peopleCounter != 0 && peopleCounter <= MAXIMUM_PEOPLE) {
+    Serial.println("WE ARE HERE");
+   float  indexPeople = (float) MAXIMUM_PEOPLE/peopleCounter;
+   int redColorBright_Out = MAXIMUM_LED_BRIGHT/indexPeople;
+   int greenColorBright_Out = MAXIMUM_LED_BRIGHT - redColorBright_Out;
+   Serial.println(redColorBright_Out);
+   Serial.println(greenColorBright_Out);
+   outsideLED.clear();  
+   outsideLED.setPixelColor(0, outsideLED.Color(((int) redColorBright_Out), ((int) greenColorBright_Out), 0));
+   outsideLED.show();
+  } 
+}
+
+
 
 void modeSelector() {
-  if(airQuality < NORMAL_AIR_QUALITY && peopleCounter <= MAXIMUM_PEOPLE && !buttonIsPressed){
+  if(airQuality < MAXIMUM_AIR_QUALITY && peopleCounter <= MAXIMUM_PEOPLE && !buttonIsPressed){
     mode = GOOD_MODE;
-  } else if (airQuality > NORMAL_AIR_QUALITY && peopleCounter <= MAXIMUM_PEOPLE && !buttonIsPressed){
+  } else if (airQuality > MAXIMUM_AIR_QUALITY && peopleCounter <= MAXIMUM_PEOPLE && !buttonIsPressed){
     mode = BAD_AIR_MODE;
   } else if (peopleCounter > MAXIMUM_PEOPLE && !buttonIsPressed){
     mode = BAD_COUNT_MODE;
