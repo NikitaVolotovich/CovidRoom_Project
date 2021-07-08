@@ -42,8 +42,13 @@ int timeCounter = 0;
 int peopleCounter = 0;
 bool isOutsideUltrasonicTriggered = false, isInsideUltrasonicTriggered = false;
 //LCD//
-int r,g,b;
-int t=0;
+int g,b;
+int t=10;
+int r=255;
+
+//const int red = 11; /*connected to pin 7*/
+//const int green = 10; /*connected to pin 7*/
+//const int blue = 9; /*connected to pin -3*/
 ///////
 
 
@@ -75,7 +80,7 @@ void setup() {
   Serial.begin(115200);
 
   outsideLED.clear();
-  outsideLED.setPixelColor(0, outsideLED.Color(0, 125, 0));
+  outsideLED.setPixelColor(0, outsideLED.Color(60, 60, 60));
   outsideLED.show();
   
   insideLED.clear();   
@@ -88,10 +93,19 @@ void loop() {
   modeSelector();
   showOnLCD();
   outputEverything();
-  openDoor();
-  delay(2000);
-  closeDoor();
-  delay(2000);
+  controlOutsideLED();
+//  for(int i = 0; i < 120; i++){
+//    insideLED.clear();   
+//    insideLED.setPixelColor(0, insideLED.Color(i, i / 2, i));
+//    insideLED.show();
+//    delay(100);
+//  }
+  
+//  openDoor();
+//  delay(2000);
+//  closeDoor();
+//  delay(2000);
+
 //  colorWipe(outsideLED.Color(0, 128, 0), outsideLED);
 }
 
@@ -99,6 +113,36 @@ void every100msTimer(void) {         // Check is ready a first timer
     timeCounter++;
 }
 
+// step 1 -> cond with < 340 ac, here we set flag (alertAirQuality) to false
+// step 2 - constant red if flag is true
+// step 3 - fade where we set the flag to true
+bool alertAirQuality = false;
+void controlOutsideLED(){
+  if(airQuality < 340) {
+    alertAirQuality = false;
+    insideLED.clear();   
+    insideLED.setPixelColor(0, insideLED.Color(0, 50, 0));
+    insideLED.show();
+  } else if (alertAirQuality == true) {
+      insideLED.setPixelColor(0, insideLED.Color(255, 0, 0));
+      insideLED.show();
+  } else {
+    // process is blocking all other functions by taking the thread exclusively
+      alertAirQuality = true;
+      int g = 255;
+      int r = 0;
+      for(;g>=0,r<255;r++,g--)
+        {
+        insideLED.setPixelColor(0, insideLED.Color(r, g, 0));
+        Serial.println("r: ");
+        Serial.print(r);
+        Serial.println("g: ");
+        Serial.print(g);
+        insideLED.show();
+        delay(25);
+        }
+    }
+  }
 
 void modeSelector() {
   if(airQuality < NORMAL_AIR_QUALITY && peopleCounter <= MAXIMUM_PEOPLE && !buttonIsPressed){
@@ -178,7 +222,35 @@ void ultrasonicValueUpdate() {
 }
 
 void detectPerson() {
+   Serial.println("___________________________");
+  if(ultrasonicOutsideNormalDistance - ultrasonicSystematicError > ultrasonicOutside){
+    if( isInsideUltrasonicTriggered==true){ 
+      Serial.println("1: Runs-outside to inside");
+      peopleCounter--;
+      isOutsideUltrasonicTriggered=false;
+      isInsideUltrasonicTriggered=false; //s2
+      return;
+    } else {  
+      Serial.println("2: Runs-outside exec first");
+      isOutsideUltrasonicTriggered=true;
+    }
+    
+  }
   
+  if(ultrasonicInsideNormalDistance - ultrasonicSystematicError>ultrasonicInside){  //from inside to outside 
+    if(isOutsideUltrasonicTriggered==true){
+      Serial.println("3: Runs-inside to outside");
+      peopleCounter++;
+      isOutsideUltrasonicTriggered=false;
+      isInsideUltrasonicTriggered=false;
+      return;
+    } else {
+      Serial.println("4: Runs-inside exec first");
+
+      isInsideUltrasonicTriggered = true;
+    }   
+
+  }
 }
 
 void openDoor() {
