@@ -22,10 +22,14 @@
 #define AQ_SENSOR A2
 
 #define START_MODE 0
-#define GOOD_MODE 1
+#define NORMAL_MODE 1
 #define BAD_AIR_MODE 2
 #define BAD_COUNT_MODE 3
-#define EMERGENCY_MODE 4
+#define BAD_COUNT_AND_AIR_MODE 4
+#define EMERGENCY_MODE 5
+
+#define NORMAL_LED_MODE 0
+#define ALARM_LED_MODE 1
 
 #define NORMAL_AIR_QUALITY 300
 #define MAXIMUM_AIR_QUALITY 600
@@ -33,7 +37,11 @@
 #define MAXIMUM_LED_BRIGHT 128
 #define SENSOR_MISTAKE_PERCENT 0.05
 
-int mode = 0;
+#define DOOR_OPEN_STATE 110
+#define DOOR_CLOSE_STATE 700
+#define TIME_FOR_EXIT 1000
+
+int mode = 0, LEDMode = 0;
 int airQuality = 0;
 
 int delayForDetecting = 201;
@@ -45,13 +53,12 @@ int peopleCounter = 0;
 
 bool buttonIsPressed = false, doorIsOpen = false;
 float distance, sensity;
-int timeCounter = 0;
+int timeCounter = 0, timeForEmergencyExit = 0;
 
 bool somethingWasDetected = false;
 
-//LCD//
-int r,g,b;
-int t=0;
+int LCDRed,LCDGreen, LCDBlue;
+int LCDTime = 0;
 ///////
 
 Adafruit_NeoPixel outsideLED = Adafruit_NeoPixel(1, OUTSIDE_LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -60,7 +67,6 @@ Servo motor;
 DFRobot_RGBLCD lcd(16,2);
 
 void setup() {
-  
   lcd.init();
 
   motor.attach(MOTOR_PIN);
@@ -71,28 +77,25 @@ void setup() {
   pinMode(ULTRASONIC_SENSOR_INSIDE_TRIG, OUTPUT); 
   pinMode(ULTRASONIC_SENSOR_INSIDE_ECHO, INPUT); 
   pinMode(EMERGENCY_BUTTON, INPUT);
-  ultrasonicValueUpdate();
-while(ultrasonicOutsideNormalDistance == 0 && ultrasonicInsideNormalDistance == 0 ) {
+  attachInterrupt(1, buttonInterrupt, FALLING);
+  
   ultrasonicValueUpdate();
   
-
-  
-  ultrasonicOutsideNormalDistance = ultrasonicOutside;
-  ultrasonicInsideNormalDistance  = ultrasonicInside;
-
-}
+  while(ultrasonicOutsideNormalDistance == 0 && ultrasonicInsideNormalDistance == 0 ) {
+    ultrasonicValueUpdate();
+    ultrasonicOutsideNormalDistance = ultrasonicOutside;
+    ultrasonicInsideNormalDistance  = ultrasonicInside;
+  }
 
   ultrasonicSystematicErrorOutside = ultrasonicOutsideNormalDistance * SENSOR_MISTAKE_PERCENT;
   ultrasonicSystematicErrorInside = ultrasonicInsideNormalDistance * SENSOR_MISTAKE_PERCENT;
-
  
   outsideLED.begin();
   insideLED.begin();
 
   Serial.begin(115200);
   
-
-  Timer2.setPeriod(10000);
+  Timer2.setPeriod(100000);
   Timer2.enableISR(CHANNEL_A);
 
   Serial.print(" normal distance outside: ");
@@ -101,30 +104,24 @@ while(ultrasonicOutsideNormalDistance == 0 && ultrasonicInsideNormalDistance == 
   Serial.println(ultrasonicInsideNormalDistance);
 
   Serial.print("error outside cm: ");
- Serial.println(ultrasonicSystematicErrorOutside);
- Serial.print(" error inside cm: ");
- Serial.println(ultrasonicSystematicErrorInside);
-
+  Serial.println(ultrasonicSystematicErrorOutside);
+  Serial.print(" error inside cm: ");
+  Serial.println(ultrasonicSystematicErrorInside);
 }
 
 void loop() {
-  
-  updateSensors();
+  ultrasonicValueUpdate();
+  detectPerson();
+  updatePeripherals();
   modeSelector();
-  showOnLCD();
-  outputEverything();
-controlInsideLED();
-controlOutsideLED();
-//  openDoor();
-//  delay(2000);
-//  closeDoor();
-//  delay(2000);
+  modeExecutor();
+//  outputEverything();
 }
 
 void controlInsideLED() {
   if(airQuality != 0 && airQuality < MAXIMUM_AIR_QUALITY) {
-    float indexAir = (float) MAXIMUM_AIR_QUALITY/airQuality;
-    float redColorBright_In = MAXIMUM_LED_BRIGHT/indexAir, greenColorBright_In = MAXIMUM_LED_BRIGHT - redColorBright_In;
+    float indexAir = (float) MAXIMUM_AIR_QUALITY / airQuality;
+    float redColorBright_In = MAXIMUM_LED_BRIGHT / indexAir, greenColorBright_In = MAXIMUM_LED_BRIGHT - redColorBright_In;
     insideLED.clear();   
     insideLED.setPixelColor(0, insideLED.Color(((int) redColorBright_In), ((int) greenColorBright_In), 0));
     insideLED.show();
@@ -137,12 +134,9 @@ void controlOutsideLED() {
     outsideLED.setPixelColor(0, outsideLED.Color(0, MAXIMUM_LED_BRIGHT, 0));
     outsideLED.show();
   } else if(peopleCounter != 0 && peopleCounter <= MAXIMUM_PEOPLE) {
-    Serial.println("WE ARE HERE");
-    float  indexPeople = (float) MAXIMUM_PEOPLE/peopleCounter;
-    int redColorBright_Out = MAXIMUM_LED_BRIGHT/indexPeople;
+    float  indexPeople = (float) MAXIMUM_PEOPLE / peopleCounter;
+    int redColorBright_Out = MAXIMUM_LED_BRIGHT / indexPeople;
     int greenColorBright_Out = MAXIMUM_LED_BRIGHT - redColorBright_Out;
-    Serial.println(redColorBright_Out);
-    Serial.println(greenColorBright_Out);
     outsideLED.clear();  
     outsideLED.setPixelColor(0, outsideLED.Color(((int) redColorBright_Out), ((int) greenColorBright_Out), 0));
     outsideLED.show();
@@ -151,12 +145,16 @@ void controlOutsideLED() {
 
 
 void modeSelector() {
-  if(airQuality < NORMAL_AIR_QUALITY && peopleCounter <= MAXIMUM_PEOPLE && !buttonIsPressed){
-    mode = GOOD_MODE;
+  if(airQuality < NORMAL_AIR_QUALITY && peopleCounter == 0 && !buttonIsPressed){
+    mode = START_MODE;
+  } else if(airQuality < NORMAL_AIR_QUALITY && peopleCounter <= MAXIMUM_PEOPLE && peopleCounter != 0 && !buttonIsPressed){
+    mode = NORMAL_MODE;
   } else if (airQuality > NORMAL_AIR_QUALITY && peopleCounter <= MAXIMUM_PEOPLE && !buttonIsPressed){
     mode = BAD_AIR_MODE;
-  } else if (peopleCounter > MAXIMUM_PEOPLE && !buttonIsPressed){
+  } else if (airQuality < NORMAL_AIR_QUALITY && peopleCounter > MAXIMUM_PEOPLE && !buttonIsPressed){
     mode = BAD_COUNT_MODE;
+  } else if (airQuality > NORMAL_AIR_QUALITY && peopleCounter > MAXIMUM_PEOPLE && !buttonIsPressed){
+    mode = BAD_COUNT_AND_AIR_MODE;
   } else if (buttonIsPressed){
     mode = EMERGENCY_MODE;
   }
@@ -169,7 +167,7 @@ void modeExecutor() {
     
       openDoor();
       break;
-    case GOOD_MODE:
+    case NORMAL_MODE:
     
       openDoor();
       break;
@@ -181,6 +179,9 @@ void modeExecutor() {
 
       closeDoor();
       break;
+    case BAD_COUNT_AND_AIR_MODE:
+    
+      break;
     case EMERGENCY_MODE:
     
       openDoor();
@@ -190,27 +191,20 @@ void modeExecutor() {
 
 
 
-void updateSensors() {
-  ultrasonicValueUpdate();
-  detectPerson();
+void updatePeripherals() {
+  showOnLCD();
+  controlInsideLED();
+  controlOutsideLED();
   airQuality = analogRead(AQ_SENSOR);
 
-  if (digitalRead(EMERGENCY_BUTTON) == HIGH) {
-    buttonIsPressed = true;
-  } else {
+  if(timeForEmergencyExit > TIME_FOR_EXIT){
+    timeForEmergencyExit = 0;
     buttonIsPressed = false;
+    Serial.println("DOOR IS CLOSE NOW");
   }
 }
 
 void ultrasonicValueUpdate() {
-  //TASK: 1) We should detect the REAL distance at first
-  //      2) We should read the value
-  //      3) We should store the value
-  //      4) We should use the value
-
- 
-  
-  
   digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, LOW);
   delayMicroseconds(2);
   digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, HIGH);
@@ -220,24 +214,18 @@ void ultrasonicValueUpdate() {
   long duration = pulseIn(ULTRASONIC_SENSOR_OUTSIDE_ECHO, HIGH);
   ultrasonicOutside = duration * 0.034 / 2;
 
- //----------
- 
-
- 
-
   digitalWrite(ULTRASONIC_SENSOR_INSIDE_TRIG, LOW);
   delayMicroseconds(2);
   digitalWrite(ULTRASONIC_SENSOR_INSIDE_TRIG, HIGH);
   delayMicroseconds(10);
   digitalWrite(ULTRASONIC_SENSOR_INSIDE_TRIG, LOW);
 
-  long duration2 = pulseIn(ULTRASONIC_SENSOR_INSIDE_ECHO, HIGH);
-  ultrasonicInside = duration2 * 0.034 / 2;
-  
+  duration = pulseIn(ULTRASONIC_SENSOR_INSIDE_ECHO, HIGH);
+  ultrasonicInside = duration * 0.034 / 2;
 }
 
 void detectPerson() {
-  if(delayForDetecting > 200){
+  if(doDetecting){
     if(ultrasonicOutside < ultrasonicOutsideNormalDistance - ultrasonicSystematicErrorOutside && somethingWasDetected == false){
       Serial.println("OUTSIDE++");
       peopleCounter++;
@@ -252,40 +240,43 @@ void detectPerson() {
     ultrasonicOutside + ultrasonicSystematicErrorOutside > ultrasonicOutsideNormalDistance &&
     ultrasonicInside < ultrasonicInsideNormalDistance + ultrasonicSystematicErrorInside &&
     ultrasonicOutside < ultrasonicOutsideNormalDistance + ultrasonicSystematicErrorOutside &&
-    somethingWasDetected == true
-    ){
+    somethingWasDetected == true){
       Serial.print("BECOMES FALSE! INSIDE: ");
       Serial.print(ultrasonicInside);
-      Serial.print("\t OUTSIDE: ");
-      Serial.println(ultrasonicOutside);
       doDetecting = false;
       delayForDetecting = 0;
       somethingWasDetected = false;
     }
   }
-//  Serial.println("==========");
 }
 
 void openDoor() {
   if(doorIsOpen == false){
-    motor.write(110);
+    motor.write(DOOR_OPEN_STATE);
     doorIsOpen = true;
   }
 }
 
 void closeDoor() {
   if(doorIsOpen == true){
-    motor.write(700);
+    motor.write(DOOR_CLOSE_STATE);
     doorIsOpen = false;
   }
 }
 
 void showOnLCD(){
-  r= (abs(sin(3.14*t/180)))*255;       
-  g= (abs(sin(3.14*(t+60)/180)))*255;
-  b= (abs(sin(3.14*(t+120)/180)))*255;
-  t=0;
-  lcd.setRGB(r, g, b);    
+  if(LEDMode == NORMAL_LED_MODE){
+    LCDRed = (abs(sin(3.14*LCDTime/180)))*255;       
+    LCDGreen = (abs(sin(3.14*(LCDTime+60)/180)))*255;
+    LCDBlue = (abs(sin(3.14*(LCDTime+120)/180)))*255;
+    LCDTime += 3;
+  } else if(LEDMode == ALARM_LED_MODE){
+    LCDRed = 255;      
+    LCDGreen = 0;
+    LCDBlue = 0;
+  }
+//  lcd.clear();
+  lcd.setRGB(LCDRed, LCDGreen, LCDBlue);    
   lcd.setCursor(0,0);
   lcd.print("Counter: ");
   lcd.print(peopleCounter);
@@ -312,9 +303,24 @@ void outputEverything() {
 }
 
 ISR(TIMER2_A) {
-  detectPerson();
+
   if(!doDetecting){
     delayForDetecting++;
+    if(delayForDetecting > 200){
+      doDetecting = true;
+    }
+  }
+  if(timeForEmergencyExit != 0){
+    timeForEmergencyExit++;
   }
   timeCounter++;
+}
+
+void buttonInterrupt() {
+  Serial.println("Button pressed");
+  if(!buttonIsPressed){
+    buttonIsPressed = true;
+    timeForEmergencyExit = 1;
+    Serial.println("Button pressed: true");
+  }
 }
