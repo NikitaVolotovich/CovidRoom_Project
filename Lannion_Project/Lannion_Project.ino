@@ -120,25 +120,13 @@ void setup() {
   Timer2.setPeriod(TIMER_PERIOD);
   Timer2.setFrequency(TIMER_FREQUENCY);
   Timer2.enableISR(CHANNEL_B);
-  
-  Serial.println("Normal distance outside: " + String(ultrasonicOutsideNormalDistance));
-  Serial.println("Normal distance inside: " + String(ultrasonicInsideNormalDistance));
-  Serial.println("Error outside cm: " + String(ultrasonicSystematicErrorOutside));
-  Serial.println("Error inside cm: " + String(ultrasonicSystematicErrorInside));
-  Serial.println("Initialization was successful");
-
-  //For demonstration
-  for(int i = 0; i < 8; i++){
-    updatePeripherals();
-    delay(500);
-    peopleCounter++;
-  }
 }
 
 void loop() {
   updatePeripherals();
   detectPerson();
   modeExecutor(mode = modeSelector());
+  Serial.println(String(ultrasonicOutside) + "\t" + String(ultrasonicInside));
 }
 
 void controlLED(Adafruit_NeoPixel &anyLED, int red, int green, int blue) {
@@ -215,7 +203,11 @@ void ultrasonicValueUpdate() {
   digitalWrite(ULTRASONIC_SENSOR_OUTSIDE_TRIG, LOW);
 
   long duration = pulseIn(ULTRASONIC_SENSOR_OUTSIDE_ECHO, HIGH);
-  ultrasonicOutside = duration * 0.034 / 2;
+  int temp = duration * 0.034 / 2;
+  if(temp < 1000){
+    ultrasonicOutside = temp;
+  }
+  
 
   digitalWrite(ULTRASONIC_SENSOR_INSIDE_TRIG, LOW);
   delayMicroseconds(2);
@@ -224,21 +216,19 @@ void ultrasonicValueUpdate() {
   digitalWrite(ULTRASONIC_SENSOR_INSIDE_TRIG, LOW);
 
   duration = pulseIn(ULTRASONIC_SENSOR_INSIDE_ECHO, HIGH);
-  ultrasonicInside = duration * 0.034 / 2;
-
-  //  ultrasonicOutside = (float) analogRead(ULTRASONIC_SENSOR_INSIDE) * 520 / 1023;
-  //  ultrasonicInside = (float) analogRead(ULTRASONIC_SENSOR_OUTSIDE) * 520 / 1023;
+  temp = duration * 0.034 / 2;
+  if(temp < 1000){
+    ultrasonicInside = temp;
+  }
 }
 
 void detectPerson() {
   if (doDetecting) {
     if (ultrasonicOutside < ultrasonicOutsideNormalDistance - ultrasonicSystematicErrorOutside && somethingWasDetected == false) {
-      Serial.println("OUTSIDE++");
       peopleCounter++;
       somethingWasDetected = true;
     }
     if (ultrasonicInside < ultrasonicInsideNormalDistance - ultrasonicSystematicErrorInside && somethingWasDetected == false) {
-      Serial.println("INSIDE--");
       if (peopleCounter != 0) {
         peopleCounter--;
       }
@@ -384,8 +374,8 @@ void sendDataToDashboard() {
       BTSerial.print("*D CLOSED");
       break;
     case EMERGENCY_MODE:
-      BTSerial.print("S GO AWAY*");
-      BTSerial.print("D OPENED*");
+      BTSerial.print("*S GO AWAY");
+      BTSerial.print("*D OPENED*");
       break;
   }
 }
@@ -422,28 +412,3 @@ void buttonInterrupt() {
     timeForEmergencyExit = 1;
   }
 }
-
-//***  NOT FOR FINAL USE  ***//
-/*
-  void outputEverything() {
-  Serial.println("Current mode: "+ String(mode));
-  Serial.println("Ultrasonic outside cm: " + String(ultrasonicOutside));
-  Serial.println("Ultrasonic inside cm: " + String(ultrasonicInside));
-  Serial.println("Button is pressed: " + String(buttonIsPressed));
-  Serial.println("Air quality: " + String(airQuality));
-  Serial.println("People counter: " + String(peopleCounter));
-  Serial.println("Time counter: " + String(delayForDetecting));
-  }
-
-  void controlInsideLED() {
-  insideLED.clear();
-  insideLED.setPixelColor(0, insideLED.Color(airQualityLEDRed, airQualityLEDGreen, airQualityLEDBlue));
-  insideLED.show();
-  }
-
-  void controlOutsideLED() {
-  outsideLED.clear();
-  outsideLED.setPixelColor(0, outsideLED.Color(peopleCounterLEDRed, peopleCounterLEDGreen, peopleCounterLEDBlue));
-  outsideLED.show();
-  }
-*/
